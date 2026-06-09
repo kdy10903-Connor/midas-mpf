@@ -1,0 +1,709 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MIDAS RPM — MPF 추적관리 대시보드 기획서</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#ffffff;--bg2:#f7f7f6;--bg3:#f0efed;
+  --text:#1a1a1a;--text2:#555;--text3:#888;
+  --border:#e5e5e3;--border2:#d0d0ce;
+  --blue:#2563eb;--blue-light:#eff6ff;--blue-mid:#bfdbfe;
+  --teal:#0f766e;--teal-light:#f0fdfa;--teal-mid:#99f6e4;
+  --amber:#b45309;--amber-light:#fffbeb;--amber-mid:#fde68a;
+  --red:#dc2626;--red-light:#fef2f2;--red-mid:#fecaca;
+  --green:#15803d;--green-light:#f0fdf4;
+  --coral:#c2410c;--coral-light:#fff7ed;
+  --radius:8px;--radius-lg:12px;
+}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','Helvetica Neue',Arial,sans-serif;background:var(--bg3);color:var(--text);font-size:14px;line-height:1.6;min-height:100vh}
+
+/* ── layout ── */
+.shell{display:grid;grid-template-columns:200px 1fr;min-height:100vh}
+.sidebar{background:var(--bg);border-right:0.5px solid var(--border);padding:1.5rem 0;position:sticky;top:0;height:100vh;overflow-y:auto;flex-shrink:0}
+.sidebar-logo{padding:0 1.25rem 1.25rem;border-bottom:0.5px solid var(--border);margin-bottom:1rem}
+.sidebar-logo-top{font-size:11px;font-weight:600;letter-spacing:.08em;color:var(--text3);text-transform:uppercase;margin-bottom:.2rem}
+.sidebar-logo-name{font-size:15px;font-weight:600;color:var(--text)}
+.sidebar-logo-sub{font-size:11px;color:var(--text3)}
+.nav-section{padding:0 .75rem;margin-bottom:.25rem}
+.nav-section-label{font-size:10px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:var(--text3);padding:.5rem .5rem .25rem}
+.nav-btn{display:flex;align-items:center;gap:.5rem;width:100%;padding:.5rem .625rem;border-radius:var(--radius);border:none;background:none;cursor:pointer;font-size:13px;color:var(--text2);text-align:left;transition:all .12s}
+.nav-btn:hover{background:var(--bg2);color:var(--text)}
+.nav-btn.active{background:var(--blue-light);color:var(--blue);font-weight:500}
+.nav-dot{width:7px;height:7px;border-radius:50%;flex-shrink:0}
+.nav-dot.green{background:#16a34a}
+.nav-dot.amber{background:#d97706}
+.nav-dot.red{background:#dc2626}
+.nav-dot.blue{background:#2563eb}
+.nav-dot.gray{background:#9ca3af}
+
+.main{overflow:auto;padding:2rem 2.5rem;max-width:1100px}
+
+/* ── pages ── */
+.page{display:none}
+.page.active{display:block}
+.page-header{margin-bottom:2rem}
+.page-eyebrow{font-size:11px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:var(--text3);margin-bottom:.35rem}
+.page-title{font-size:24px;font-weight:600;color:var(--text);margin-bottom:.4rem}
+.page-sub{font-size:13px;color:var(--text2)}
+
+/* ── kpi cards ── */
+.kpi-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:1.5rem}
+.kpi{background:var(--bg);border:0.5px solid var(--border);border-radius:var(--radius-lg);padding:.875rem 1rem}
+.kpi-label{font-size:11px;color:var(--text3);margin-bottom:.3rem;font-weight:500}
+.kpi-val{font-size:22px;font-weight:600;color:var(--text);line-height:1.1}
+.kpi-sub{font-size:11px;margin-top:.3rem;display:flex;align-items:center;gap:.25rem}
+.kpi-sub.up{color:var(--teal)}
+.kpi-sub.down{color:var(--red)}
+.kpi-sub.neu{color:var(--text3)}
+.kpi-sub.warn{color:var(--amber)}
+
+/* ── chart cards ── */
+.card{background:var(--bg);border:0.5px solid var(--border);border-radius:var(--radius-lg);padding:1.25rem;margin-bottom:1.25rem}
+.card-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem}
+.card-title{font-size:13px;font-weight:500;color:var(--text)}
+.card-badge{font-size:10px;padding:2px 8px;border-radius:20px;background:var(--bg2);color:var(--text3);border:0.5px solid var(--border)}
+.grid-2{display:grid;grid-template-columns:1fr 1fr;gap:1.25rem;margin-bottom:1.25rem}
+.grid-3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:1.25rem;margin-bottom:1.25rem}
+.grid-2 .card,.grid-3 .card{margin-bottom:0}
+
+/* ── legend ── */
+.legend{display:flex;flex-wrap:wrap;gap:12px;margin-bottom:.75rem}
+.legend-item{display:flex;align-items:center;gap:5px;font-size:11px;color:var(--text2)}
+.legend-sq{width:10px;height:10px;border-radius:2px}
+.legend-ln{width:14px;height:2px}
+.legend-dash{width:14px;height:0;border-top:2px dashed currentColor}
+
+/* ── signal ── */
+.signal-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px;margin-bottom:1.5rem}
+.signal-card{background:var(--bg);border:0.5px solid var(--border);border-radius:var(--radius-lg);padding:.875rem 1rem}
+.signal-top{display:flex;align-items:center;gap:.4rem;margin-bottom:.4rem}
+.signal-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+.signal-dot.green{background:#16a34a}
+.signal-dot.amber{background:#d97706}
+.signal-dot.red{background:#dc2626}
+.signal-name{font-size:11px;color:var(--text2);font-weight:500}
+.signal-val{font-size:20px;font-weight:600;color:var(--text)}
+.signal-note{font-size:11px;color:var(--text3);margin-top:.2rem}
+.signal-card.is-red{border-color:var(--red-mid);background:var(--red-light)}
+.signal-card.is-amber{border-color:var(--amber-mid);background:var(--amber-light)}
+
+/* ── alert banners ── */
+.alert{border-radius:var(--radius);padding:.625rem .875rem;font-size:12px;margin-top:.75rem;display:flex;gap:.5rem;align-items:flex-start;line-height:1.5}
+.alert.red{background:var(--red-light);color:#991b1b;border:0.5px solid var(--red-mid)}
+.alert.amber{background:var(--amber-light);color:#92400e;border:0.5px solid var(--amber-mid)}
+.alert.blue{background:var(--blue-light);color:#1e40af;border:0.5px solid var(--blue-mid)}
+.alert-icon{font-size:13px;flex-shrink:0;margin-top:.05rem}
+
+/* ── funnel ── */
+.funnel-row{display:flex;align-items:center;gap:.75rem;margin-bottom:.5rem}
+.funnel-stage{font-size:11px;color:var(--text2);width:76px;flex-shrink:0;font-weight:500}
+.funnel-bar-bg{flex:1;background:var(--bg2);border-radius:4px;height:28px;overflow:hidden}
+.funnel-bar{height:100%;border-radius:4px;display:flex;align-items:center;padding-left:.625rem;transition:width .3s}
+.funnel-bar span{font-size:11px;font-weight:500;white-space:nowrap}
+.funnel-pct{font-size:11px;color:var(--text3);width:34px;text-align:right;flex-shrink:0}
+.funnel-chg{font-size:10px;width:44px;text-align:right;flex-shrink:0}
+.funnel-chg.down{color:var(--red)}
+.funnel-chg.up{color:var(--teal)}
+.funnel-chg.neu{color:var(--text3)}
+.funnel-hdr{display:flex;justify-content:flex-end;gap:.5rem;margin-bottom:.35rem}
+.funnel-hdr span{font-size:10px;color:var(--text3)}
+.funnel-hdr span:last-child{width:44px;text-align:right}
+
+/* ── page-list (plan) ── */
+.page-list{border:0.5px solid var(--border);border-radius:var(--radius-lg);overflow:hidden;margin-bottom:1.5rem}
+.page-list-row{display:grid;grid-template-columns:140px 1fr;border-bottom:0.5px solid var(--border)}
+.page-list-row:last-child{border-bottom:none}
+.page-list-label{padding:.875rem 1rem;background:var(--bg2);border-right:0.5px solid var(--border)}
+.page-list-num{font-size:10px;color:var(--text3);letter-spacing:.08em;text-transform:uppercase;font-weight:600}
+.page-list-name{font-size:13px;font-weight:600;color:var(--text);margin-top:.2rem}
+.page-list-content{padding:.875rem 1rem}
+.page-list-desc{font-size:12px;color:var(--text2);margin-bottom:.5rem;line-height:1.6}
+.tags{display:flex;flex-wrap:wrap;gap:5px}
+.tag{font-size:11px;padding:2px 8px;border-radius:20px;border:0.5px solid var(--border2);color:var(--text2);background:var(--bg2)}
+
+/* ── flow ── */
+.flow-block{margin-bottom:1rem}
+.flow-label{font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.08em;margin-bottom:.4rem}
+.flow-line{display:flex;align-items:center;flex-wrap:wrap;gap:6px}
+.flow-node{font-size:12px;padding:4px 10px;border-radius:20px;white-space:nowrap;font-weight:500}
+.flow-node.blue{background:var(--blue-light);color:#1e40af}
+.flow-node.teal{background:var(--teal-light);color:#134e4a}
+.flow-node.amber{background:var(--amber-light);color:#78350f}
+.flow-node.coral{background:var(--coral-light);color:#7c2d12}
+.flow-arrow{font-size:13px;color:var(--text3)}
+
+/* ── supplement ── */
+.supplement-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px;margin-bottom:1.5rem}
+.supplement-card{background:var(--bg);border:0.5px solid var(--border);border-radius:var(--radius-lg);padding:1rem 1.125rem}
+.supplement-title{font-size:13px;font-weight:600;color:var(--text);margin-bottom:.375rem}
+.supplement-body{font-size:12px;color:var(--text2);line-height:1.6}
+
+/* ── glossary ── */
+.glossary-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:0 2rem}
+.glossary-item{border-top:0.5px solid var(--border);padding:.625rem 0}
+.glossary-term{font-size:12px;font-weight:600;color:var(--text)}
+.glossary-abbr{display:inline-block;background:var(--blue-light);color:#1e40af;font-size:10px;padding:1px 6px;border-radius:4px;margin-right:.4rem;font-weight:700}
+.glossary-def{font-size:12px;color:var(--text2);margin-top:.25rem;line-height:1.6}
+
+/* ── goal/outcome ── */
+.goal-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin-bottom:1.5rem}
+.goal-card{background:var(--bg);border:0.5px solid var(--border);border-radius:var(--radius-lg);padding:1rem 1.125rem}
+.goal-num{font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--text3);margin-bottom:.35rem}
+.goal-title{font-size:13px;font-weight:600;color:var(--text);margin-bottom:.3rem}
+.goal-body{font-size:12px;color:var(--text2);line-height:1.6}
+
+.outcome-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px;margin-bottom:1.5rem}
+.outcome-card{background:var(--bg);border:0.5px solid var(--border);border-radius:var(--radius-lg);padding:1rem 1.125rem}
+.outcome-icon{font-size:18px;color:var(--text3);margin-bottom:.5rem}
+.outcome-title{font-size:13px;font-weight:600;color:var(--text);margin-bottom:.25rem}
+.outcome-body{font-size:12px;color:var(--text2);line-height:1.6}
+
+/* ── cover ── */
+.cover{padding:3rem 0 2.5rem;border-bottom:0.5px solid var(--border);margin-bottom:2.5rem}
+.cover-eyebrow{font-size:11px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--text3);margin-bottom:.6rem}
+.cover-title{font-size:30px;font-weight:700;color:var(--text);line-height:1.2;margin-bottom:.5rem}
+.cover-sub{font-size:14px;color:var(--text2);margin-bottom:1.5rem;line-height:1.65;max-width:560px}
+.cover-meta{display:flex;gap:2rem;flex-wrap:wrap}
+.meta-item{font-size:12px;color:var(--text3)}
+.meta-item strong{color:var(--text2);font-weight:500}
+
+.divider{border:none;border-top:0.5px solid var(--border);margin:2.5rem 0}
+
+/* ── cagr call-out ── */
+.callout{border-radius:var(--radius);padding:1rem 1.125rem;margin-top:.75rem;border:0.5px solid var(--amber-mid);background:var(--amber-light)}
+.callout-title{font-size:12px;font-weight:600;color:var(--amber);margin-bottom:.3rem}
+.callout-body{font-size:12px;color:#78350f;line-height:1.6}
+
+/* ── responsive ── */
+@media(max-width:768px){
+  .shell{grid-template-columns:1fr}
+  .sidebar{display:none}
+  .main{padding:1.25rem}
+  .grid-2,.grid-3{grid-template-columns:1fr}
+}
+</style>
+</head>
+<body>
+<div class="shell">
+
+<!-- ── SIDEBAR ── -->
+<nav class="sidebar">
+  <div class="sidebar-logo">
+    <div class="sidebar-logo-top">MIDAS RPM</div>
+    <div class="sidebar-logo-name">MPF 대시보드</div>
+    <div class="sidebar-logo-sub">기획서 v1.0</div>
+  </div>
+  <div class="nav-section">
+    <div class="nav-section-label">기획서</div>
+    <button class="nav-btn active" onclick="go('plan')"><span class="nav-dot blue"></span>개요 · 목적 · 구성</button>
+    <button class="nav-btn" onclick="go('flow')"><span class="nav-dot blue"></span>지표 연결 구조</button>
+    <button class="nav-btn" onclick="go('supplement')"><span class="nav-dot blue"></span>추후 보완 과제</button>
+    <button class="nav-btn" onclick="go('glossary')"><span class="nav-dot blue"></span>용어 정의</button>
+  </div>
+  <div class="nav-section">
+    <div class="nav-section-label">대시보드 시안</div>
+    <button class="nav-btn" onclick="go('p0')"><span class="nav-dot gray"></span>P0 — 전사 신호등</button>
+    <button class="nav-btn" onclick="go('p1')"><span class="nav-dot blue"></span>P1 — 사업 현황</button>
+    <button class="nav-btn" onclick="go('p2')"><span class="nav-dot blue"></span>P2 — 마케팅 현황</button>
+    <button class="nav-btn" onclick="go('p3')"><span class="nav-dot teal" style="background:#0f766e"></span>P3 — 기존 고객</button>
+    <button class="nav-btn" onclick="go('p4')"><span class="nav-dot amber" style="background:#d97706"></span>P4 — 재무 현황</button>
+    <button class="nav-btn" onclick="go('p5')"><span class="nav-dot red"></span>P5 — Vision 2030</button>
+  </div>
+</nav>
+
+<!-- ── MAIN ── -->
+<main class="main">
+
+<!-- ───────────── PLAN ───────────── -->
+<div class="page active" id="page-plan">
+  <div class="cover">
+    <div class="cover-eyebrow">마이다스 전사 경영 대시보드</div>
+    <div class="cover-title">MPF 추적관리 대시보드<br>기획서</div>
+    <div class="cover-sub">사업·마케팅·재무·Vision 2030을 하나의 흐름으로 추적하는 전사 합의 지표 체계 및 대시보드 설계안. 흐름이 꺾이기 전에 알아채야 다음 달을 바꿀 수 있다.</div>
+    <div class="cover-meta">
+      <div class="meta-item">버전 <strong>v1.0</strong></div>
+      <div class="meta-item">대상 <strong>경영위원회 · 경영전략실</strong></div>
+      <div class="meta-item">운영 주기 <strong>월 1회 (수동 입력)</strong></div>
+    </div>
+  </div>
+
+  <div class="page-eyebrow">01 — 목적과 목표</div>
+  <div class="page-title" style="font-size:18px;margin-bottom:1rem">왜 만드는가</div>
+  <div class="goal-grid">
+    <div class="goal-card"><div class="goal-num">목표 01</div><div class="goal-title">이상신호 조기 감지</div><div class="goal-body">흐름이 꺾이기 전에 월간 리뷰에서 포착. 경영위원회 전용 Layer 1 지표.</div></div>
+    <div class="goal-card"><div class="goal-num">목표 02</div><div class="goal-title">원인 정확 진단</div><div class="goal-body">이상신호 발생 시 경전실이 Layer 2로 한 단계 더 깊이 파고드는 구조.</div></div>
+    <div class="goal-card"><div class="goal-num">목표 03</div><div class="goal-title">전사 지표 통일</div><div class="goal-body">부서마다 다른 기준 제거. 전사 합의 지표로 추적 일관성과 누적 학습 확보.</div></div>
+    <div class="goal-card"><div class="goal-num">목표 04</div><div class="goal-title">Vision 2030 연결</div><div class="goal-body">매월의 성과가 2030 목표 궤도 위에 있는지 CAGR 선으로 즉시 확인.</div></div>
+  </div>
+
+  <div class="divider"></div>
+  <div class="page-eyebrow">02 — 기대 효과</div>
+  <div class="page-title" style="font-size:18px;margin-bottom:1rem">이걸 통해 무엇을 얻는가</div>
+  <div class="outcome-grid">
+    <div class="outcome-card"><div class="outcome-title">빨간불이 어디인지 1분 안에</div><div class="outcome-body">P0 신호등에서 전 영역 이상 여부를 한눈에 확인. 어느 페이지로 들어가야 할지 즉시 판단.</div></div>
+    <div class="outcome-card"><div class="outcome-title">원인-결과 추적 가능</div><div class="outcome-body">MBM 참여율이 떨어지면 3개월 후 매출이 어떻게 될지 퍼널 흐름으로 미리 예측.</div></div>
+    <div class="outcome-card"><div class="outcome-title">국가별 분리 추적</div><div class="outcome-body">RPM 권역 재편에도 국가 단위 데이터 유지. 권역 묶음은 필터로 처리.</div></div>
+    <div class="outcome-card"><div class="outcome-title">2030 도달 가능성 체감</div><div class="outcome-body">CAGR 궤도선으로 "지금 속도로 가면 2030에 어디 도착하는지" 매년 시각화.</div></div>
+  </div>
+
+  <div class="divider"></div>
+  <div class="page-eyebrow">03 — 페이지 구성</div>
+  <div class="page-title" style="font-size:18px;margin-bottom:1rem">6개 페이지 구조</div>
+  <div class="page-list">
+    <div class="page-list-row">
+      <div class="page-list-label"><div class="page-list-num">PAGE 0</div><div class="page-list-name">전사 신호등</div></div>
+      <div class="page-list-content"><div class="page-list-desc">전 영역 핵심 지표를 색상(녹·황·적)으로 표시. 경영위원회 월간 리뷰 시작점.</div><div class="tags"><span class="tag">누적 달성률</span><span class="tag">신규·기존 매출 비중</span><span class="tag">영업 모수 확보율</span><span class="tag">CAC</span><span class="tag">영업이익률</span><span class="tag">채권 약정준수율</span><span class="tag">CAGR 궤도 위치</span><span class="tag">Sales Cycle</span></div></div>
+    </div>
+    <div class="page-list-row">
+      <div class="page-list-label"><div class="page-list-num">PAGE 1</div><div class="page-list-name">사업 현황</div></div>
+      <div class="page-list-content"><div class="page-list-desc">과거 확인 → 현재 진단 → 미래 예측. 국가별 필터 적용.</div><div class="tags"><span class="tag">월별·연도별 매출</span><span class="tag">YoY 성장률</span><span class="tag">달성률</span><span class="tag">aIDMA 예상 마감치</span><span class="tag">신규 vs 기존 매출</span><span class="tag">ARPU</span></div></div>
+    </div>
+    <div class="page-list-row">
+      <div class="page-list-label"><div class="page-list-num">PAGE 2</div><div class="page-list-name">마케팅 현황</div></div>
+      <div class="page-list-content"><div class="page-list-desc">모수 확보 → 활성화 → 질 검증 → 퍼널 → 비용. 퍼널이 위에서 아래로 좁아지는 구조.</div><div class="tags"><span class="tag">모수 확보율 (국가별)</span><span class="tag">월간 DB 확보 수</span><span class="tag">MBM 참여율</span><span class="tag">MBM 후속 전환율</span><span class="tag">ICP Rate</span><span class="tag">aIDMA 전환율·체류시간</span><span class="tag">크로스셀 aIDMA</span><span class="tag">Sales Cycle</span><span class="tag">CAC</span></div></div>
+    </div>
+    <div class="page-list-row">
+      <div class="page-list-label"><div class="page-list-num">PAGE 3</div><div class="page-list-name">기존 고객</div></div>
+      <div class="page-list-content"><div class="page-list-desc">사용 현황으로 이탈 선행신호 포착. 재계약·업셀 퍼널 추적.</div><div class="tags"><span class="tag">사용량 추이</span><span class="tag">DAU / MAU</span><span class="tag">재계약 aIDMA 전환율</span><span class="tag">재계약 aIDMA 체류시간</span><span class="tag">업셀 aIDMA</span></div></div>
+    </div>
+    <div class="page-list-row">
+      <div class="page-list-label"><div class="page-list-num">PAGE 4</div><div class="page-list-name">재무 현황</div></div>
+      <div class="page-list-content"><div class="page-list-desc">수익성 → 채권 건전성 → 해외법인 → 자금 순서.</div><div class="tags"><span class="tag">영업이익률 MIT·MIN</span><span class="tag">인당 매출</span><span class="tag">인당 영업이익</span><span class="tag">채권 약정준수율</span><span class="tag">3개월 경과채권</span><span class="tag">장기분납 비율</span><span class="tag">해외법인 흑적자</span><span class="tag">로열티 미납잔액</span><span class="tag">본사 실보유 자금</span></div></div>
+    </div>
+    <div class="page-list-row" style="border-bottom:none">
+      <div class="page-list-label"><div class="page-list-num">PAGE 5</div><div class="page-list-name">Vision 2030</div></div>
+      <div class="page-list-content"><div class="page-list-desc">CAGR 궤도선으로 현재 속도가 목표에 닿는지 매년 체감.</div><div class="tags"><span class="tag">CAGR 궤도선</span><span class="tag">연도별 목표 vs 달성</span><span class="tag">누적 사용자 (MODS·소급·아카데믹)</span><span class="tag">시장 점유율</span></div></div>
+    </div>
+  </div>
+</div>
+
+<!-- ───────────── FLOW ───────────── -->
+<div class="page" id="page-flow">
+  <div class="page-header">
+    <div class="page-eyebrow">04 — 지표 연결 구조</div>
+    <div class="page-title">인과 흐름 — 어디가 꺾이면 무엇이 영향받는가</div>
+    <div class="page-sub">두 개의 메인 흐름이 합쳐져 전체 매출·영업이익률로 수렴한다.</div>
+  </div>
+  <div class="card">
+    <div class="card-head"><div class="card-title">신규 흐름</div></div>
+    <div class="flow-line">
+      <span class="flow-node blue">MBM 참여율</span><span class="flow-arrow">→</span>
+      <span class="flow-node blue">DB 확보 / ICP Rate</span><span class="flow-arrow">→</span>
+      <span class="flow-node blue">aIDMA 전환율·체류시간</span><span class="flow-arrow">→</span>
+      <span class="flow-node blue">Sales Cycle Length</span><span class="flow-arrow">→</span>
+      <span class="flow-node blue">신규 매출</span>
+    </div>
+  </div>
+  <div class="card">
+    <div class="card-head"><div class="card-title">기존 흐름</div></div>
+    <div class="flow-line">
+      <span class="flow-node teal">DAU/MAU · 사용량</span><span class="flow-arrow">→</span>
+      <span class="flow-node teal">재계약 aIDMA</span><span class="flow-arrow">→</span>
+      <span class="flow-node teal">MODS 유지율 · ARPU</span><span class="flow-arrow">→</span>
+      <span class="flow-node teal">기존 매출</span>
+    </div>
+  </div>
+  <div class="card">
+    <div class="card-head"><div class="card-title">수렴 → 재무</div></div>
+    <div class="flow-line">
+      <span class="flow-node blue">신규 매출</span><span class="flow-arrow">+</span>
+      <span class="flow-node teal">기존 매출</span><span class="flow-arrow">→</span>
+      <span class="flow-node amber">전체 매출 · 비중</span><span class="flow-arrow">→</span>
+      <span class="flow-node coral">영업이익률 · 인당 영업이익</span>
+    </div>
+    <div class="alert amber" style="margin-top:1rem">
+      <span class="alert-icon">⚠</span>
+      <span><strong>연결 보완 필요:</strong> Sales Cycle 지연 → 현금 유입 지연 → 자금 현황. 이 연결이 현재 자동으로 보이지 않는다. 단기: P0 신호등에서 Sales Cycle 임계값 초과 시 자금 현황에도 주의 표시 연동.</span>
+    </div>
+  </div>
+
+  <div class="divider"></div>
+  <div style="font-size:14px;font-weight:600;color:var(--text);margin-bottom:1rem">Layer 구조 — 누가 어떤 지표를 보는가</div>
+  <div class="grid-2">
+    <div class="card" style="border-color:var(--blue-mid)">
+      <div class="card-head"><div class="card-title" style="color:var(--blue)">Layer 1 — 경영위원회</div></div>
+      <p style="font-size:12px;color:var(--text2);line-height:1.6;margin-bottom:.75rem">이상신호를 감지하는 월간 리뷰용 지표. '지금 잘 가고 있는가, 다음 달은 어떻게 될 것 같은가' 직관적 판단.</p>
+      <div class="tags">
+        <span class="tag">전월 성과</span><span class="tag">누적 달성률</span><span class="tag">예상 성과</span><span class="tag">신규·기존 비중</span><span class="tag">MODS 유지율</span><span class="tag">영업 모수 확보율</span><span class="tag">CAC</span><span class="tag">영업이익률</span><span class="tag">채권 약정준수율</span><span class="tag">해외법인 흑자 수</span>
+      </div>
+    </div>
+    <div class="card" style="border-color:var(--teal-mid)">
+      <div class="card-head"><div class="card-title" style="color:var(--teal)">Layer 2 — 경영전략실</div></div>
+      <p style="font-size:12px;color:var(--text2);line-height:1.6;margin-bottom:.75rem">Layer 1 이상 감지 시 원인을 진단하는 도구. 대시보드가 아닌 진단 키트.</p>
+      <div class="tags">
+        <span class="tag">aIDMA 단계별 전환율</span><span class="tag">aIDMA 체류시간</span><span class="tag">Sales Cycle</span><span class="tag">ICP Rate</span><span class="tag">DAU/MAU</span><span class="tag">사용량 추이</span><span class="tag">ARPU</span><span class="tag">3개월 경과채권</span><span class="tag">장기분납 비율</span><span class="tag">로열티 미납잔액</span><span class="tag">인당 영업이익</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ───────────── SUPPLEMENT ───────────── -->
+<div class="page" id="page-supplement">
+  <div class="page-header">
+    <div class="page-eyebrow">05 — 추후 보완 과제</div>
+    <div class="page-title">다음 버전에서 강화할 것</div>
+    <div class="page-sub">v1.0은 수동 입력 기반. 아래 순서로 자동화·고도화 예정.</div>
+  </div>
+  <div class="supplement-grid">
+    <div class="supplement-card"><div class="supplement-title">① aIDMA 예측 모델 고도화</div><div class="supplement-body">현재 당월 예상 마감치는 수동 입력. BRS 연동 후 실시간 자동 예측으로 전환. 현금흐름 예측까지 연결.</div></div>
+    <div class="supplement-card"><div class="supplement-title">② Sales Cycle → 현금흐름 연동</div><div class="supplement-body">Sales Cycle 임계값 초과 시 자금 현황 신호에도 경보 자동 표시. 단기 workaround 후 예측 모델에 통합.</div></div>
+    <div class="supplement-card"><div class="supplement-title">③ 개발 트랙 추가 (v3.0)</div><div class="supplement-body">상품 완성도(P1 레벨), 출시 일정 준수율 등 개발 지표 정의 후 별도 페이지 추가. 사업 성과와 상품 품질의 연결 확보.</div></div>
+    <div class="supplement-card"><div class="supplement-title">④ 무예산제도 정량화</div><div class="supplement-body">법인카드 사용현황을 매출 대비 비율로 1차 추적. 팀별 정상 범위 기준값은 재무팀-경전실 협의 후 확정.</div></div>
+    <div class="supplement-card"><div class="supplement-title">⑤ 국가별 TAM 세분화</div><div class="supplement-body">현재 전체 TAM 100만 단일 기준. 국가별 엔지니어 모수 데이터 확보 후 국가별 TAM으로 분리. 모수 확보율 정확도 향상.</div></div>
+    <div class="supplement-card"><div class="supplement-title">⑥ 상시 모니터링 전환</div><div class="supplement-body">현재 월 1회 수동 입력. BRS·aIDMA 예측 모델 완료 시 핵심 지표부터 상시 자동 업데이트로 전환.</div></div>
+  </div>
+</div>
+
+<!-- ───────────── GLOSSARY ───────────── -->
+<div class="page" id="page-glossary">
+  <div class="page-header">
+    <div class="page-eyebrow">06 — 용어 정의</div>
+    <div class="page-title">지표 약어 풀네임 및 정의</div>
+    <div class="page-sub">대시보드에 등장하는 모든 약어의 풀네임과 의미.</div>
+  </div>
+  <div class="glossary-grid">
+    <div>
+      <div class="glossary-item"><div class="glossary-term"><span class="glossary-abbr">MPF</span>Monitoring · Prediction · Feedback</div><div class="glossary-def">경영 추적의 3단계 프레임. 모니터링으로 이상 감지, 예측으로 선행 판단, 피드백으로 개선 반영.</div></div>
+      <div class="glossary-item"><div class="glossary-term"><span class="glossary-abbr">aIDMA</span>awareness · Interest · Desire · Motivation · Action</div><div class="glossary-def">마이다스형 영업·마케팅 퍼널. 인지→관심→욕구→동기→행동(계약) 5단계 전환 추적.</div></div>
+      <div class="glossary-item"><div class="glossary-term"><span class="glossary-abbr">MODS</span>Maintenance On Demand Service</div><div class="glossary-def">연간 유지보수 계약. 기존 고객 매출의 핵심 구조. MODS 유지율 = 갱신 비율.</div></div>
+      <div class="glossary-item"><div class="glossary-term"><span class="glossary-abbr">ARPU</span>Average Revenue Per User</div><div class="glossary-def">사용자당 평균 매출. 제품별·국가별로 분리하여 운영 효율성 파악.</div></div>
+      <div class="glossary-item"><div class="glossary-term"><span class="glossary-abbr">CAC</span>Customer Acquisition Cost</div><div class="glossary-def">신규 고객 1건 획득 비용. 마케팅+영업 총비용 ÷ 신규 계약 건수.</div></div>
+      <div class="glossary-item"><div class="glossary-term"><span class="glossary-abbr">ICP Rate</span>Ideal Customer Profile Rate</div><div class="glossary-def">확보된 DB 중 이상적 고객 프로파일 부합 비율. 양이 아닌 질 지표.</div></div>
+    </div>
+    <div>
+      <div class="glossary-item"><div class="glossary-term"><span class="glossary-abbr">TAM</span>Total Addressable Market</div><div class="glossary-def">전체 확보 가능 시장. RPM 기준 전세계 엔지니어 약 100만명.</div></div>
+      <div class="glossary-item"><div class="glossary-term"><span class="glossary-abbr">MBM</span>Marketing Based Meeting</div><div class="glossary-def">마케팅 기반 미팅. 세미나·웨비나 등 활성화 이벤트. 참여율과 후속 DB 전환율로 효과 측정.</div></div>
+      <div class="glossary-item"><div class="glossary-term"><span class="glossary-abbr">DAU/MAU</span>Daily / Monthly Active Users</div><div class="glossary-def">일간/월간 활성 사용자 수. 비율이 높을수록 제품이 일상에 정착된 상태.</div></div>
+      <div class="glossary-item"><div class="glossary-term"><span class="glossary-abbr">SCL</span>Sales Cycle Length</div><div class="glossary-def">첫 접촉(a)부터 계약(A)까지 평균 소요 일수. 단축이 핵심 과제.</div></div>
+      <div class="glossary-item"><div class="glossary-term"><span class="glossary-abbr">CAGR</span>Compound Annual Growth Rate</div><div class="glossary-def">연평균 복합 성장률. 2030 목표 역산 시 필요 CAGR vs 현재 실제 CAGR 비교로 궤도 이탈 판단.</div></div>
+      <div class="glossary-item"><div class="glossary-term"><span class="glossary-abbr">YoY</span>Year over Year</div><div class="glossary-def">전년 동기 대비 성장률. 계절성을 제거한 성장 추이 비교 기준.</div></div>
+    </div>
+  </div>
+</div>
+
+<!-- ───────────── P0 신호등 ───────────── -->
+<div class="page" id="page-p0">
+  <div class="page-header">
+    <div class="page-eyebrow">PAGE 0 — 전사 신호등</div>
+    <div class="page-title">이상신호 허브</div>
+    <div class="page-sub">2026년 5월 기준 · 경보(적) → 해당 페이지로 즉시 이동</div>
+  </div>
+  <div class="signal-grid">
+    <div class="signal-card"><div class="signal-top"><span class="signal-dot green"></span><span class="signal-name">누적 달성률</span></div><div class="signal-val">87%</div><div class="signal-note">목표 대비 정상 궤도</div></div>
+    <div class="signal-card is-amber"><div class="signal-top"><span class="signal-dot amber"></span><span class="signal-name">신규 매출 비중</span></div><div class="signal-val">31%</div><div class="signal-note">전월 35% → 주의</div></div>
+    <div class="signal-card"><div class="signal-top"><span class="signal-dot green"></span><span class="signal-name">영업 모수 확보율</span></div><div class="signal-val">43%</div><div class="signal-note">TAM 100만 대비</div></div>
+    <div class="signal-card is-red"><div class="signal-top"><span class="signal-dot red"></span><span class="signal-name">CAC</span></div><div class="signal-val">+28%</div><div class="signal-note">전월 대비 급등</div></div>
+    <div class="signal-card is-amber"><div class="signal-top"><span class="signal-dot amber"></span><span class="signal-name">영업이익률 (MIT)</span></div><div class="signal-val">26.1%</div><div class="signal-note">목표 30% 미달</div></div>
+    <div class="signal-card"><div class="signal-top"><span class="signal-dot green"></span><span class="signal-name">채권 약정준수율</span></div><div class="signal-val">98.2%</div><div class="signal-note">정상 (기준 95%)</div></div>
+    <div class="signal-card is-amber"><div class="signal-top"><span class="signal-dot amber"></span><span class="signal-name">CAGR 궤도</span></div><div class="signal-val">−1.2yr</div><div class="signal-note">목표 대비 속도 지연</div></div>
+    <div class="signal-card is-red"><div class="signal-top"><span class="signal-dot red"></span><span class="signal-name">Sales Cycle</span></div><div class="signal-val">58일</div><div class="signal-note">전월 45일 → 경보</div></div>
+  </div>
+  <div style="display:flex;gap:1.5rem;font-size:11px;color:var(--text3);margin-top:.25rem">
+    <span><span class="signal-dot green" style="display:inline-block;margin-right:.3rem"></span>정상</span>
+    <span><span class="signal-dot amber" style="display:inline-block;margin-right:.3rem"></span>주의</span>
+    <span><span class="signal-dot red" style="display:inline-block;margin-right:.3rem"></span>경보</span>
+  </div>
+  <div class="alert red" style="margin-top:1.25rem">
+    <span class="alert-icon">▲</span>
+    <span><strong>이번 달 우선 확인:</strong> CAC +28% 급등 + Sales Cycle 58일 동시 경보. P2 마케팅에서 ICP Rate 하락 여부, D→M 전환율 정체 구간 진단 필요.</span>
+  </div>
+</div>
+
+<!-- ───────────── P1 사업 ───────────── -->
+<div class="page" id="page-p1">
+  <div class="page-header">
+    <div class="page-eyebrow">PAGE 1 — 사업 현황</div>
+    <div class="page-title">과거 확인 → 현재 진단 → 미래 예측</div>
+    <div class="page-sub">국가 전체 기준 · 국가별 필터 적용 가능</div>
+  </div>
+  <div class="kpi-row">
+    <div class="kpi"><div class="kpi-label">전월 매출</div><div class="kpi-val">38.4억</div><div class="kpi-sub up">↑ YoY +11%</div></div>
+    <div class="kpi"><div class="kpi-label">누적 달성률</div><div class="kpi-val">87%</div><div class="kpi-sub neu">연간 목표 대비</div></div>
+    <div class="kpi"><div class="kpi-label">당월 예상 (aIDMA)</div><div class="kpi-val">41.2억</div><div class="kpi-sub up">목표 96%</div></div>
+    <div class="kpi"><div class="kpi-label">신규 매출 비중</div><div class="kpi-val">31%</div><div class="kpi-sub down">↓ 전월 35%</div></div>
+    <div class="kpi"><div class="kpi-label">기존 매출 비중</div><div class="kpi-val">69%</div><div class="kpi-sub warn">전월 65% → 확인</div></div>
+  </div>
+  <div class="card">
+    <div class="card-head"><div class="card-title">월별 매출 추이 (신규 / 기존 / 목표)</div><div class="card-badge">최근 12개월</div></div>
+    <div class="legend">
+      <span class="legend-item"><span class="legend-sq" style="background:#2563eb"></span>신규 매출</span>
+      <span class="legend-item"><span class="legend-sq" style="background:#0f766e"></span>기존 매출</span>
+      <span class="legend-item"><span style="display:inline-block;width:14px;height:0;border-top:2px dashed #dc2626;margin-right:5px;vertical-align:middle"></span>목표</span>
+    </div>
+    <div style="position:relative;height:220px"><canvas id="c1_sales" role="img" aria-label="월별 신규·기존 매출 추이">월별 매출 데이터</canvas></div>
+  </div>
+  <div class="grid-2">
+    <div class="card">
+      <div class="card-head"><div class="card-title">신규 vs 기존 매출 비중</div></div>
+      <div class="legend">
+        <span class="legend-item"><span class="legend-sq" style="background:#2563eb"></span>신규 31%</span>
+        <span class="legend-item"><span class="legend-sq" style="background:#0f766e"></span>기존 69%</span>
+      </div>
+      <div style="position:relative;height:160px"><canvas id="c1_mix" role="img" aria-label="신규 기존 매출 비중">신규 31% 기존 69%</canvas></div>
+    </div>
+    <div class="card">
+      <div class="card-head"><div class="card-title">ARPU — 국가별 (백만원/사용자)</div></div>
+      <div style="position:relative;height:160px"><canvas id="c1_arpu" role="img" aria-label="국가별 ARPU">국가별 ARPU 데이터</canvas></div>
+    </div>
+  </div>
+</div>
+
+<!-- ───────────── P2 마케팅 ───────────── -->
+<div class="page" id="page-p2">
+  <div class="page-header">
+    <div class="page-eyebrow">PAGE 2 — 마케팅 현황</div>
+    <div class="page-title">모수 확보 → 활성화 → 퍼널 → 비용</div>
+    <div class="page-sub">위에서 아래로 퍼널이 좁아지는 구조</div>
+  </div>
+  <div class="kpi-row">
+    <div class="kpi"><div class="kpi-label">영업 모수 확보율</div><div class="kpi-val">43%</div><div class="kpi-sub neu">TAM 100만 대비</div></div>
+    <div class="kpi"><div class="kpi-label">월간 신규 DB 확보</div><div class="kpi-val">420건</div><div class="kpi-sub up">↑ 전월 360건</div></div>
+    <div class="kpi"><div class="kpi-label">ICP Rate</div><div class="kpi-val">38%</div><div class="kpi-sub down">↓ 전월 44%</div></div>
+    <div class="kpi"><div class="kpi-label">MBM 후속 전환율</div><div class="kpi-val">22%</div><div class="kpi-sub up">↑ 전월 19%</div></div>
+    <div class="kpi"><div class="kpi-label">CAC</div><div class="kpi-val">+28%</div><div class="kpi-sub down">↑ 전월 대비</div></div>
+  </div>
+  <div class="card">
+    <div class="card-head"><div class="card-title">신규 aIDMA 퍼널</div><div class="card-badge">이번 달 기준</div></div>
+    <div class="funnel-hdr"><span>전환율</span><span>전월 대비</span></div>
+    <div class="funnel-row">
+      <div class="funnel-stage">a 인지</div>
+      <div class="funnel-bar-bg"><div class="funnel-bar" style="width:100%;background:#bfdbfe"><span style="color:#1e3a8a">4,320명</span></div></div>
+      <div class="funnel-pct">—</div><div class="funnel-chg neu">—</div>
+    </div>
+    <div class="funnel-row">
+      <div class="funnel-stage">I 관심</div>
+      <div class="funnel-bar-bg"><div class="funnel-bar" style="width:72%;background:#93c5fd"><span style="color:#1e3a8a">3,110명</span></div></div>
+      <div class="funnel-pct">72%</div><div class="funnel-chg neu">—</div>
+    </div>
+    <div class="funnel-row">
+      <div class="funnel-stage">D 욕구</div>
+      <div class="funnel-bar-bg"><div class="funnel-bar" style="width:48%;background:#3b82f6"><span style="color:#fff">2,074명</span></div></div>
+      <div class="funnel-pct">67%</div><div class="funnel-chg neu">—</div>
+    </div>
+    <div class="funnel-row">
+      <div class="funnel-stage">M 동기</div>
+      <div class="funnel-bar-bg"><div class="funnel-bar" style="width:22%;background:#1d4ed8"><span style="color:#fff">949명</span></div></div>
+      <div class="funnel-pct" style="color:var(--red)">46%</div><div class="funnel-chg down">▼21%p</div>
+    </div>
+    <div class="funnel-row">
+      <div class="funnel-stage">A 계약</div>
+      <div class="funnel-bar-bg"><div class="funnel-bar" style="width:9%;background:#1e3a8a"><span style="color:#fff">389명</span></div></div>
+      <div class="funnel-pct">41%</div><div class="funnel-chg neu">—</div>
+    </div>
+    <div class="alert red">
+      <span class="alert-icon">▲</span>
+      <span>D→M 전환율 급락 (67%→46%). aIDMA 체류시간 확인 필요 — 평균 22일, 전월 12일. '사고 싶지만 결정 못함' 신호.</span>
+    </div>
+  </div>
+  <div class="grid-2">
+    <div class="card">
+      <div class="card-head"><div class="card-title">Sales Cycle Length 추이</div><div class="card-badge">일수</div></div>
+      <div style="position:relative;height:150px"><canvas id="c2_cycle" role="img" aria-label="Sales Cycle 추이">Sales Cycle 데이터</canvas></div>
+    </div>
+    <div class="card">
+      <div class="card-head"><div class="card-title">월간 신규 DB 확보 추이</div></div>
+      <div style="position:relative;height:150px"><canvas id="c2_db" role="img" aria-label="신규 DB 확보 추이">DB 데이터</canvas></div>
+    </div>
+  </div>
+</div>
+
+<!-- ───────────── P3 기존 고객 ───────────── -->
+<div class="page" id="page-p3">
+  <div class="page-header">
+    <div class="page-eyebrow">PAGE 3 — 기존 고객 현황</div>
+    <div class="page-title">사용 현황 → 재계약·업셀 퍼널</div>
+    <div class="page-sub">사용량 감소는 이탈의 선행신호</div>
+  </div>
+  <div class="kpi-row">
+    <div class="kpi"><div class="kpi-label">월평균 접속 횟수</div><div class="kpi-val">14.2회</div><div class="kpi-sub down">↓ 전월 17.1회</div></div>
+    <div class="kpi"><div class="kpi-label">DAU/MAU</div><div class="kpi-val">0.38</div><div class="kpi-sub down">↓ 전월 0.43</div></div>
+    <div class="kpi"><div class="kpi-label">재계약 전환율</div><div class="kpi-val">71%</div><div class="kpi-sub down">↓ 전월 79%</div></div>
+    <div class="kpi"><div class="kpi-label">업셀 전환율</div><div class="kpi-val">18%</div><div class="kpi-sub neu">전월 동일</div></div>
+  </div>
+  <div class="alert amber">
+    <span class="alert-icon">⚠</span>
+    <span>사용량 추이 + DAU/MAU + 재계약 전환율 동시 하락. 제품 사용 자체가 식는 중. 가격이 아닌 사용 경험 개입 필요 — CS·제품팀 액션.</span>
+  </div>
+  <div style="margin-bottom:1.25rem"></div>
+  <div class="card">
+    <div class="card-head"><div class="card-title">사용량 추이 (월평균 접속 횟수)</div><div class="card-badge">최근 12개월</div></div>
+    <div style="position:relative;height:180px"><canvas id="c3_usage" role="img" aria-label="사용량 추이">사용량 데이터</canvas></div>
+  </div>
+  <div class="card">
+    <div class="card-head"><div class="card-title">재계약 aIDMA 퍼널</div></div>
+    <div class="funnel-hdr"><span>전환율</span><span>전월 대비</span></div>
+    <div class="funnel-row">
+      <div class="funnel-stage">갱신 도래</div>
+      <div class="funnel-bar-bg"><div class="funnel-bar" style="width:100%;background:#99f6e4"><span style="color:#134e4a">820건</span></div></div>
+      <div class="funnel-pct">—</div><div class="funnel-chg neu">—</div>
+    </div>
+    <div class="funnel-row">
+      <div class="funnel-stage">접촉</div>
+      <div class="funnel-bar-bg"><div class="funnel-bar" style="width:88%;background:#2dd4bf"><span style="color:#134e4a">721건</span></div></div>
+      <div class="funnel-pct">88%</div><div class="funnel-chg neu">—</div>
+    </div>
+    <div class="funnel-row">
+      <div class="funnel-stage">의향</div>
+      <div class="funnel-bar-bg"><div class="funnel-bar" style="width:64%;background:#0d9488"><span style="color:#fff">525건</span></div></div>
+      <div class="funnel-pct" style="color:var(--red)">73%</div><div class="funnel-chg down">▼12%p</div>
+    </div>
+    <div class="funnel-row">
+      <div class="funnel-stage">확정</div>
+      <div class="funnel-bar-bg"><div class="funnel-bar" style="width:45%;background:#0f766e"><span style="color:#fff">369건</span></div></div>
+      <div class="funnel-pct">70%</div><div class="funnel-chg neu">—</div>
+    </div>
+  </div>
+</div>
+
+<!-- ───────────── P4 재무 ───────────── -->
+<div class="page" id="page-p4">
+  <div class="page-header">
+    <div class="page-eyebrow">PAGE 4 — 재무 현황</div>
+    <div class="page-title">수익성 → 채권 건전성 → 해외법인 → 자금</div>
+    <div class="page-sub">25.08.31 기준</div>
+  </div>
+  <div class="kpi-row">
+    <div class="kpi"><div class="kpi-label">영업이익률 (MIT)</div><div class="kpi-val">29.3%</div><div class="kpi-sub warn">목표 30%</div></div>
+    <div class="kpi"><div class="kpi-label">영업이익률 (MIN)</div><div class="kpi-val">6.8%</div><div class="kpi-sub warn">목표 7.7%</div></div>
+    <div class="kpi"><div class="kpi-label">인당 매출 (MIT)</div><div class="kpi-val">2.1억</div><div class="kpi-sub up">↑ YoY +8%</div></div>
+    <div class="kpi"><div class="kpi-label">인당 영업이익</div><div class="kpi-val">0.61억</div><div class="kpi-sub down">↓ YoY −3%</div></div>
+    <div class="kpi"><div class="kpi-label">채권 약정준수율</div><div class="kpi-val">98.2%</div><div class="kpi-sub up">정상 (≥95%)</div></div>
+  </div>
+  <div class="grid-2">
+    <div class="card">
+      <div class="card-head"><div class="card-title">채권 약정준수율 추이</div></div>
+      <div class="legend">
+        <span class="legend-item"><span class="legend-sq" style="background:#2563eb"></span>MIT국내</span>
+        <span class="legend-item"><span style="display:inline-block;width:14px;height:0;border-top:2px dashed #dc2626;margin-right:5px;vertical-align:middle"></span>해외법인</span>
+        <span class="legend-item"><span class="legend-sq" style="background:#0f766e"></span>MIN</span>
+      </div>
+      <div style="position:relative;height:160px"><canvas id="c4_bond" role="img" aria-label="채권 약정준수율 추이">채권 데이터</canvas></div>
+    </div>
+    <div class="card">
+      <div class="card-head"><div class="card-title">해외법인 영업이익률 (%)</div></div>
+      <div style="position:relative;height:160px"><canvas id="c4_overseas" role="img" aria-label="해외법인 영업이익률">해외법인 데이터</canvas></div>
+    </div>
+  </div>
+  <div class="card">
+    <div class="card-head"><div class="card-title">법인별 로열티 미납잔액 (억원)</div><div class="card-badge">24년말 → 현재</div></div>
+    <div style="position:relative;height:140px"><canvas id="c4_royalty" role="img" aria-label="로열티 미납잔액">로열티 데이터</canvas></div>
+  </div>
+  <div class="alert blue">
+    <span class="alert-icon">ℹ</span>
+    <span>인당 매출은 증가했으나 인당 영업이익은 감소 중. 매출 성장이 비용 증가를 상쇄하지 못하는 구조. 판관비 세부 점검 필요.</span>
+  </div>
+</div>
+
+<!-- ───────────── P5 Vision ───────────── -->
+<div class="page" id="page-p5">
+  <div class="page-header">
+    <div class="page-eyebrow">PAGE 5 — Vision 2030</div>
+    <div class="page-title">목표 궤도 대비 현재 위치</div>
+    <div class="page-sub">지금 속도로 가면 2030년에 어디 도착하는가</div>
+  </div>
+  <div class="kpi-row">
+    <div class="kpi"><div class="kpi-label">2030 매출 목표</div><div class="kpi-val">1.8조</div><div class="kpi-sub neu">RPM 기준</div></div>
+    <div class="kpi"><div class="kpi-label">필요 CAGR</div><div class="kpi-val">38%</div><div class="kpi-sub down">현재 속도 28%</div></div>
+    <div class="kpi"><div class="kpi-label">누적 사용자</div><div class="kpi-val">43만</div><div class="kpi-sub up">↑ YoY +18%</div></div>
+    <div class="kpi"><div class="kpi-label">시장 점유율</div><div class="kpi-val">12%</div><div class="kpi-sub up">↑ 전년 9%</div></div>
+  </div>
+  <div class="card">
+    <div class="card-head"><div class="card-title">CAGR 궤도선 — 목표 vs 실제 vs 현재 속도 유지 시 예상</div><div class="card-badge">2024–2030</div></div>
+    <div class="legend">
+      <span class="legend-item"><span style="display:inline-block;width:14px;height:0;border-top:2px solid #dc2626;margin-right:5px;vertical-align:middle"></span>목표 궤도 (CAGR 38%)</span>
+      <span class="legend-item"><span class="legend-sq" style="background:#2563eb"></span>실제 성장</span>
+      <span class="legend-item"><span style="display:inline-block;width:14px;height:0;border-top:2px dashed #0f766e;margin-right:5px;vertical-align:middle"></span>현재 속도 유지 예상</span>
+    </div>
+    <div style="position:relative;height:220px"><canvas id="c5_cagr" role="img" aria-label="CAGR 궤도선">CAGR 데이터</canvas></div>
+    <div class="callout">
+      <div class="callout-title">⚠ 현재 속도 유지 시 2030년 예상 도달 매출: 약 9,200억 — 목표(1.8조)의 51%</div>
+      <div class="callout-body">2027년부터 성장률 가속이 필요하다. 필요 CAGR(38%)과 현재 실제 성장률(28%) 간 격차 10%p를 메우기 위한 사업 전략 수립 시급.</div>
+    </div>
+  </div>
+  <div class="card">
+    <div class="card-head"><div class="card-title">누적 사용자 추이 (MODS / 소급 / 아카데믹)</div></div>
+    <div class="legend">
+      <span class="legend-item"><span class="legend-sq" style="background:#2563eb"></span>MODS</span>
+      <span class="legend-item"><span class="legend-sq" style="background:#0f766e"></span>소급</span>
+      <span class="legend-item"><span class="legend-sq" style="background:#d97706"></span>아카데믹</span>
+    </div>
+    <div style="position:relative;height:180px"><canvas id="c5_users" role="img" aria-label="누적 사용자 추이">사용자 데이터</canvas></div>
+  </div>
+</div>
+
+</main>
+</div>
+
+<script>
+const months=['1월','2월','3월','4월','5월','6월','7월','8월','9월','10월','11월','12월'];
+const rendered={};
+
+function go(id){
+  document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
+  document.querySelectorAll('.nav-btn').forEach(b=>b.classList.remove('active'));
+  document.getElementById('page-'+id).classList.add('active');
+  event.currentTarget.classList.add('active');
+  setTimeout(()=>renderPage(id),80);
+  window.scrollTo(0,0);
+}
+
+function renderPage(id){
+  if(rendered[id]) return;
+  rendered[id]=true;
+  const gridColor='rgba(0,0,0,0.06)';
+  const tickFont={size:11};
+
+  if(id==='p1'){
+    new Chart(document.getElementById('c1_sales'),{type:'bar',data:{labels:months,datasets:[
+      {label:'신규',data:[8,7,9,10,9,11,12,10,11,13,14,12],backgroundColor:'#3b82f6',borderRadius:3,stack:'s'},
+      {label:'기존',data:[22,21,24,23,25,24,26,25,27,26,28,27],backgroundColor:'#0f766e',borderRadius:3,stack:'s'},
+      {label:'목표',data:[32,31,35,35,36,37,40,38,40,42,44,42],type:'line',borderColor:'#dc2626',borderDash:[5,4],borderWidth:1.5,pointRadius:0,fill:false}
+    ]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:{stacked:true,ticks:{font:tickFont},grid:{display:false}},y:{stacked:true,ticks:{font:tickFont,callback:v=>v+'억'},grid:{color:gridColor}}}}});
+    new Chart(document.getElementById('c1_mix'),{type:'doughnut',data:{labels:['신규','기존'],datasets:[{data:[31,69],backgroundColor:['#3b82f6','#0f766e'],borderWidth:0}]},options:{responsive:true,maintainAspectRatio:false,cutout:'68%',plugins:{legend:{display:false}}}});
+    new Chart(document.getElementById('c1_arpu'),{type:'bar',data:{labels:['한국','일본','미국','인도','필리핀','호주'],datasets:[{data:[4.2,3.8,5.1,2.1,1.4,3.3],backgroundColor:'#93c5fd',borderRadius:3,barPercentage:.6}]},options:{indexAxis:'y',responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:{ticks:{font:tickFont,callback:v=>v+'M'},grid:{color:gridColor}},y:{ticks:{font:tickFont},grid:{display:false}}}}});
+  }
+  if(id==='p2'){
+    new Chart(document.getElementById('c2_cycle'),{type:'line',data:{labels:months.slice(0,6),datasets:[
+      {label:'Sales Cycle',data:[42,44,43,45,51,58],borderColor:'#dc2626',borderWidth:2,tension:.3,pointRadius:3,fill:false,pointBackgroundColor:'#dc2626'},
+      {label:'목표',data:[40,40,40,40,40,40],borderColor:'rgba(0,0,0,0.2)',borderDash:[5,4],borderWidth:1,pointRadius:0,fill:false}
+    ]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:{ticks:{font:tickFont},grid:{display:false}},y:{ticks:{font:tickFont,callback:v=>v+'일'},grid:{color:gridColor}}}}});
+    new Chart(document.getElementById('c2_db'),{type:'bar',data:{labels:months.slice(0,6),datasets:[{data:[310,290,340,380,360,420],backgroundColor:'#93c5fd',borderRadius:3}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:{ticks:{font:tickFont},grid:{display:false}},y:{ticks:{font:tickFont},grid:{color:gridColor}}}}});
+  }
+  if(id==='p3'){
+    new Chart(document.getElementById('c3_usage'),{type:'line',data:{labels:months,datasets:[{data:[18,17,19,18,17,16,18,17,16,15,14,14],borderColor:'#0d9488',borderWidth:2,tension:.3,pointRadius:3,fill:true,backgroundColor:'rgba(13,148,136,.08)',pointBackgroundColor:'#0d9488'}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:{ticks:{font:tickFont},grid:{display:false}},y:{ticks:{font:tickFont,callback:v=>v+'회'},grid:{color:gridColor}}}}});
+  }
+  if(id==='p4'){
+    new Chart(document.getElementById('c4_bond'),{type:'line',data:{labels:['23.8','24.1','24.4','24.8','24.12','25.4','25.8'],datasets:[
+      {label:'MIT국내',data:[98.5,98.8,99.0,99.2,99.4,99.3,99.4],borderColor:'#2563eb',borderWidth:1.5,tension:.3,pointRadius:2,fill:false},
+      {label:'해외법인',data:[85.1,86,88,90,92,92.5,92.9],borderColor:'#dc2626',borderDash:[4,4],borderWidth:1.5,tension:.3,pointRadius:2,fill:false},
+      {label:'MIN',data:[95.5,96,97,98,95.4,98,99.3],borderColor:'#0f766e',borderWidth:1.5,tension:.3,pointRadius:2,fill:false}
+    ]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:{ticks:{font:{size:10}},grid:{display:false}},y:{min:80,ticks:{font:tickFont,callback:v=>v+'%'},grid:{color:gridColor}}}}});
+    const nations=['일본','미국','인도','러시아','필리핀','호주','유럽','남미'];
+    const vals=[-3.1,-1.8,-7.1,-11.7,-12.6,-32.8,-5.2,-2.6];
+    new Chart(document.getElementById('c4_overseas'),{type:'bar',data:{labels:nations,datasets:[{data:vals,backgroundColor:vals.map(v=>v>=0?'#0d9488':'#fca5a5'),borderRadius:3,barPercentage:.65}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:{ticks:{font:{size:9}},grid:{display:false}},y:{ticks:{font:tickFont,callback:v=>v+'%'},grid:{color:gridColor}}}}});
+    new Chart(document.getElementById('c4_royalty'),{type:'bar',data:{labels:['인도','필리핀','미국','일본','기타'],datasets:[
+      {label:'24년말',data:[30,22,18,9,6],backgroundColor:'#fde68a',borderRadius:3,barPercentage:.4},
+      {label:'현재',data:[27,17,13,7,5],backgroundColor:'#f59e0b',borderRadius:3,barPercentage:.4}
+    ]},options:{indexAxis:'y',responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:{ticks:{font:tickFont,callback:v=>v+'억'},grid:{color:gridColor}},y:{ticks:{font:tickFont},grid:{display:false}}}}});
+  }
+  if(id==='p5'){
+    const years=['2024','2025','2026','2027','2028','2029','2030'];
+    new Chart(document.getElementById('c5_cagr'),{type:'line',data:{labels:years,datasets:[
+      {label:'목표',data:[589,813,1122,1549,2137,2949,4070],borderColor:'#dc2626',borderWidth:2,tension:.2,pointRadius:3,fill:false,pointBackgroundColor:'#dc2626'},
+      {label:'실제',data:[589,696,null,null,null,null,null],borderColor:'#2563eb',borderWidth:2.5,tension:.2,pointRadius:4,fill:false,pointBackgroundColor:'#2563eb',spanGaps:false},
+      {label:'예상',data:[589,696,891,1141,1460,1869,2393],borderColor:'#0f766e',borderDash:[5,4],borderWidth:1.5,tension:.2,pointRadius:2,fill:false,pointBackgroundColor:'#0f766e'}
+    ]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:{ticks:{font:tickFont},grid:{display:false}},y:{ticks:{font:tickFont,callback:v=>Math.round(v/100)+'백억'},grid:{color:gridColor}}}}});
+    new Chart(document.getElementById('c5_users'),{type:'bar',data:{labels:['2021','2022','2023','2024','2025(예)'],datasets:[
+      {label:'MODS',data:[18,22,26,31,37],backgroundColor:'#3b82f6',borderRadius:3,stack:'s'},
+      {label:'소급',data:[5,6,7,8,9],backgroundColor:'#0f766e',borderRadius:3,stack:'s'},
+      {label:'아카데믹',data:[1,2,3,4,5],backgroundColor:'#d97706',borderRadius:3,stack:'s'}
+    ]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:{stacked:true,ticks:{font:tickFont},grid:{display:false}},y:{stacked:true,ticks:{font:tickFont,callback:v=>v+'만'},grid:{color:gridColor}}}}});
+  }
+}
+</script>
+</body>
+</html>
